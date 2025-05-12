@@ -1,6 +1,45 @@
+// 在app.js文件顶部添加
+const ALCHEMY_URL = "https://polygon-amoy.g.alchemy.com/v2/nP7PBQKi1MJpsoIdYVqvX5-rCAOb8cTF";
+
+// 区块链连接函数
+function connectToBlockchain() {
+  // 方式1：通过用户钱包连接 
+  if (window.ethereum) {
+    // 用户有MetaMask时，通过它连接
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    console.log("通过用户钱包连接到区块链");
+  } 
+  // 方式2：直接连接（不依赖用户钱包）
+  else {
+    // 用户没有钱包时，使用Alchemy直接连接
+    provider = new ethers.providers.JsonRpcProvider(ALCHEMY_URL);
+    console.log("通过Alchemy直接连接到区块链");
+  }
+  
+  return provider;
+}
+
+// 使用示例
+async function showNFTCount() {
+  // 建立连接
+  const connection = connectToBlockchain();
+  
+  // 连接到您的合约
+  const nftContract = new ethers.Contract(
+    contractAddress,  // 您部署的合约地址
+    contractABI,      // 合约接口
+    connection        // 刚刚建立的连接
+  );
+  
+  // 读取区块链数据
+  const totalNFTs = await nftContract.totalSupply();
+  
+  // 显示数据
+  console.log(`总共铸造了 ${totalNFTs} 个NFTs`);
+}
 // 合约地址和ABI
 // 合约地址需要在部署后填写
-const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const contractAddress = "0xb4f94C07Dabd77644B417cc36CD5A3167ea0eCdb";
 // ABI需要从编译后的合约中获取
 const contractABI = [
     {
@@ -766,6 +805,22 @@ async function uploadToIPFS(file) {
 }
 
 // 铸造NFT
+// 获取当前铸造费用
+async function getMintFee() {
+  try {
+    // 确保合约已初始化
+    if (!contract) await initializeContract();
+    
+    // 调用合约获取铸造费用
+    const fee = await contract.mintFee();
+    return fee; // 这是一个BigNumber
+  } catch (error) {
+    console.error("获取铸造费用失败:", error);
+    return ethers.utils.parseEther("0.01"); // 默认费用
+  }
+}
+
+// 铸造NFT (更新后的函数)
 async function mintNFT() {
   if (!selectedFile || !titleInput.value || !locationInput.value || !userLocation) {
     alert("请填写所有信息并上传图片");
@@ -776,31 +831,61 @@ async function mintNFT() {
     mintButton.textContent = "处理中...";
     mintButton.disabled = true;
     
-    // 1. 上传图片 (模拟)
+    // 1. 获取铸造费用
+    const mintFee = await getMintFee();
+    console.log("铸造费用:", ethers.utils.formatEther(mintFee), "MATIC");
+    
+    // 2. 上传图片 (真实项目中链接到IPFS)
     const imageUrl = await uploadToIPFS(selectedFile);
     
-    // 2. 准备元数据
+    // 3. 准备元数据
     const metadata = {
       name: titleInput.value,
       description: descriptionInput.value,
       image: imageUrl
     };
     
-    // 3. 上传元数据 (模拟)
+    // 4. 上传元数据
     const metadataUrl = await uploadToIPFS(JSON.stringify(metadata));
     
-    // 4. 准备位置数据
+    // 5. 准备位置数据
     const locationData = JSON.stringify({
       name: locationInput.value,
       lat: userLocation.lat,
       lng: userLocation.lng
     });
     
-    // 5. 调用合约铸造NFT
-    const tx = await contract.mintNFT(userAccount, metadataUrl, locationData);
+    // 6. 调用合约铸造NFT (注意增加了value字段用于支付费用)
+    const tx = await contract.mintNFT(
+      userAccount, 
+      metadataUrl, 
+      locationData,
+      { value: mintFee } // 支付费用
+    );
+    
+    // 显示交易状态
+    const txStatusDiv = document.createElement('div');
+    txStatusDiv.className = 'bg-yellow-50 p-4 rounded-lg my-4';
+    txStatusDiv.innerHTML = `
+      <p class="text-yellow-700">交易已提交，正在等待确认...</p>
+      <p class="text-sm text-yellow-600">交易哈希: ${tx.hash}</p>
+    `;
+    createForm.appendChild(txStatusDiv);
+    
+    // 等待交易确认
     await tx.wait();
     
-    alert("NFT铸造成功！");
+    // 更新状态显示
+    txStatusDiv.className = 'bg-green-50 p-4 rounded-lg my-4';
+    txStatusDiv.innerHTML = `
+      <p class="text-green-700">NFT铸造成功！已支付 ${ethers.utils.formatEther(mintFee)} MATIC</p>
+      <p class="text-sm text-green-600">交易哈希: ${tx.hash}</p>
+    `;
+    
+    // 5秒后移除状态显示
+    setTimeout(() => {
+      txStatusDiv.remove();
+    }, 5000);
     
     // 重置表单
     resetForm();
@@ -809,10 +894,37 @@ async function mintNFT() {
     showCollectionTab();
   } catch (error) {
     console.error("铸造NFT失败:", error);
-    alert("铸造NFT失败: " + error.message);
+    let errorMessage = error.message;
+    
+    // 检查是否是费用不足的错误
+    if (errorMessage.includes("Insufficient payment")) {
+      errorMessage = "支付的费用不足，请确保您有足够的MATIC";
+    }
+    
+    alert("铸造NFT失败: " + errorMessage);
   } finally {
     mintButton.textContent = "铸造NFT";
     mintButton.disabled = false;
+  }
+}
+
+// 显示铸造费用
+async function displayMintFee() {
+  const mintFeeElement = document.getElementById('mint-fee');
+  try {
+    const fee = await getMintFee();
+    mintFeeElement.textContent = `${ethers.utils.formatEther(fee)} MATIC`;
+  } catch (error) {
+    mintFeeElement.textContent = "无法加载费用信息";
+  }
+}
+
+// 在页面加载和钱包连接后调用
+async function initializeApp() {
+  if (userAccount) {
+    await initializeContract();
+    await displayMintFee();
+    // ... 其他初始化操作
   }
 }
 
