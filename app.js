@@ -696,29 +696,42 @@ async function checkConnection() {
 }
 
 // 连接钱包
-// 对于ethers v5，连接钱包的代码应如下:
 async function connectWallet() {
+  console.log("连接钱包函数被调用");
+  
   if (window.ethereum) {
+    console.log("检测到MetaMask");
     try {
+      // 初始化Web3
+      const web3 = new Web3(window.ethereum);
+      console.log("Web3初始化成功");
+      
+      // 请求账户
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      userAccount = accounts[0];
-      walletInfo.textContent = `${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
+      console.log("获取到账户:", accounts);
       
-      // 使用ethers v5的方式初始化
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      contract = new ethers.Contract(contractAddress, contractABI, signer);
-      
-      // 加载NFT等操作...
-      return true;
+      if (accounts.length > 0) {
+        userAccount = accounts[0];
+        console.log("当前账户:", userAccount);
+        
+        // 更新UI
+        document.getElementById('wallet-info').textContent = 
+          `${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
+        
+        // 初始化合约
+        contract = new web3.eth.Contract(contractABI, contractAddress);
+        
+        // 显示主界面
+        document.getElementById('welcome-screen').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+      }
     } catch (error) {
-      console.error("连接钱包失败:", error);
+      console.error("连接钱包出错:", error);
       alert("连接钱包失败: " + error.message);
-      return false;
     }
   } else {
+    console.error("未检测到MetaMask");
     alert("请安装MetaMask钱包");
-    return false;
   }
 }
 
