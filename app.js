@@ -696,6 +696,7 @@ async function checkConnection() {
 }
 
 // 连接钱包
+// 对于ethers v5，连接钱包的代码应如下:
 async function connectWallet() {
   if (window.ethereum) {
     try {
@@ -703,15 +704,21 @@ async function connectWallet() {
       userAccount = accounts[0];
       walletInfo.textContent = `${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
       
-      await initializeContract();
-      showMainApp();
-      loadUserNFTs();
+      // 使用ethers v5的方式初始化
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      contract = new ethers.Contract(contractAddress, contractABI, signer);
+      
+      // 加载NFT等操作...
+      return true;
     } catch (error) {
       console.error("连接钱包失败:", error);
       alert("连接钱包失败: " + error.message);
+      return false;
     }
   } else {
     alert("请安装MetaMask钱包");
+    return false;
   }
 }
 
