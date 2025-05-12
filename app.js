@@ -697,40 +697,20 @@ async function checkConnection() {
 
 // 连接钱包
 async function connectWallet() {
-  console.log("连接钱包函数被调用");
-  
   if (window.ethereum) {
-    console.log("检测到MetaMask");
     try {
-      // 初始化Web3
-      const web3 = new Web3(window.ethereum);
-      console.log("Web3初始化成功");
-      
-      // 请求账户
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      console.log("获取到账户:", accounts);
+      userAccount = accounts[0];
+      walletInfo.textContent = `${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
       
-      if (accounts.length > 0) {
-        userAccount = accounts[0];
-        console.log("当前账户:", userAccount);
-        
-        // 更新UI
-        document.getElementById('wallet-info').textContent = 
-          `${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
-        
-        // 初始化合约
-        contract = new web3.eth.Contract(contractABI, contractAddress);
-        
-        // 显示主界面
-        document.getElementById('welcome-screen').classList.add('hidden');
-        document.getElementById('main-app').classList.remove('hidden');
-      }
+      await initializeContract();
+      showMainApp();
+      loadUserNFTs();
     } catch (error) {
-      console.error("连接钱包出错:", error);
+      console.error("连接钱包失败:", error);
       alert("连接钱包失败: " + error.message);
     }
   } else {
-    console.error("未检测到MetaMask");
     alert("请安装MetaMask钱包");
   }
 }
